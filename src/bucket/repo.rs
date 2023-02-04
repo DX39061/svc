@@ -110,11 +110,11 @@ impl RepoMeta {
         let mut file =
             File::create(svc_path.join("repo")).expect("can not open .svc/repo, maybe it lost?");
         
-        file.write_fmt(format_args!("repo_name = {}\n", repo_name))?;
-        file.write_fmt(format_args!("repo_intro = {}\n", repo_intro))?;
-        file.write_fmt(format_args!("remote_url = {}\n", remote_url))?;
-        file.write_fmt(format_args!("created_at = {}\n", created_at))?;
-        file.write_fmt(format_args!("updated_at = {}\n", updated_at))?;
+        file.write_fmt(format_args!("repo_name = {}\n", repo_name.trim()))?;
+        file.write_fmt(format_args!("repo_intro = {}\n", repo_intro.trim()))?;
+        file.write_fmt(format_args!("remote_url = {}\n", remote_url.trim()))?;
+        file.write_fmt(format_args!("created_at = {}\n", created_at.trim()))?;
+        file.write_fmt(format_args!("updated_at = {}\n", updated_at.trim()))?;
 
         Ok(())
     }
