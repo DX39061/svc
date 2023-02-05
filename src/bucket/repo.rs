@@ -132,7 +132,7 @@ pub fn check_svc_repo() -> Result<PathBuf, &'static str> {
             // println!("{:?}", parent);
             path = parent.to_path_buf();
         } else {
-            return Err("not a svc repo yet");
+            return Err("error: not a svc repo yet");
         }
     }
 }

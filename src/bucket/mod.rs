@@ -5,6 +5,7 @@ use log::Commit;
 
 mod repo;
 mod log;
+mod tree;
 
 pub fn info() {
     // println!("command info");
