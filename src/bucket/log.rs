@@ -1,10 +1,12 @@
-use crate::util::{get_str_hash, get_file_hash, compress_data};
+use crate::util::{compress_data, get_file_hash, get_str_hash};
 use chrono::Local;
 use std::{
-    fs::{self, File, OpenOptions}, 
-    io::{Read, Error, Write, BufReader, BufRead}, 
-    path::PathBuf, 
-    process, fmt::Display, collections::HashMap
+    collections::HashMap,
+    fmt::Display,
+    fs::{self, File, OpenOptions},
+    io::{BufRead, BufReader, Error, Read, Write},
+    path::PathBuf,
+    process,
 };
 
 pub struct Tree {
@@ -22,23 +24,33 @@ struct TreeEntry {
 
 enum ObjectType {
     ObjectBlob,
-    ObjectTree
+    ObjectTree,
 }
 
 impl Display for ObjectType {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             ObjectType::ObjectBlob => write!(f, "blob"),
-            ObjectType::ObjectTree => write!(f, "tree")
+            ObjectType::ObjectTree => write!(f, "tree"),
         }
     }
 }
 
 impl TreeEntry {
-    fn new(entry_path: PathBuf, object_type: ObjectType, svc_path: PathBuf, exclude: &HashMap<PathBuf, bool>) -> TreeEntry {
+    fn new(
+        entry_path: PathBuf,
+        object_type: ObjectType,
+        svc_path: PathBuf,
+        exclude: &HashMap<PathBuf, bool>,
+    ) -> TreeEntry {
         let size;
         let hash;
-        let name = entry_path.file_name().unwrap().to_str().unwrap().to_string();
+        let name = entry_path
+            .file_name()
+            .unwrap()
+            .to_str()
+            .unwrap()
+            .to_string();
         match object_type {
             ObjectType::ObjectBlob => {
                 size = fs::metadata(entry_path.clone()).unwrap().len();
@@ -50,7 +62,12 @@ impl TreeEntry {
                 hash = tree.hash;
             }
         }
-        TreeEntry { object_type, hash, name, size }
+        TreeEntry {
+            object_type,
+            hash,
+            name,
+            size,
+        }
     }
 
     fn save_blob(entry_path: PathBuf, svc_path: PathBuf, hash: &str) -> Result<(), Error> {
@@ -60,12 +77,12 @@ impl TreeEntry {
         match fs::create_dir(svc_path.join("objects").join(dir)) {
             Ok(_) => (),
             Err(ref e) if e.kind() == std::io::ErrorKind::AlreadyExists => (),
-            Err(e) => return Err(e)
+            Err(e) => return Err(e),
         };
         let mut file_write = File::create(svc_path.join("objects").join(dir).join(filename))?;
         let mut file_read = File::open(entry_path)?;
-        let mut buf = [0;1024];
-        
+        let mut buf = [0; 1024];
+
         while let Ok(bytes_read) = file_read.read(&mut buf) {
             if bytes_read == 0 {
                 break;
@@ -84,12 +101,15 @@ impl TreeEntry {
         match fs::create_dir(svc_path.join("objects").join(dir)) {
             Ok(_) => (),
             Err(ref e) if e.kind() == std::io::ErrorKind::AlreadyExists => (),
-            Err(e) => return Err(e)
+            Err(e) => return Err(e),
         };
         let mut file_write = File::create(svc_path.join("objects").join(dir).join(filename))?;
         file_write.write_fmt(format_args!("{} {}\n", tree.hash, tree.size))?;
         for entry in &tree.records {
-            file_write.write_fmt(format_args!("{} {} {} {}\n", entry.hash, entry.object_type, entry.name, entry.size))?;
+            file_write.write_fmt(format_args!(
+                "{} {} {} {}\n",
+                entry.hash, entry.object_type, entry.name, entry.size
+            ))?;
         }
         println!("tree {:?}", tree.hash);
         Ok(())
@@ -99,7 +119,7 @@ impl TreeEntry {
 pub struct Commit {
     pub hash: String,
     pub parent_hash: String,
-    pub data: Tree,
+    pub tree_hash: String,
     pub date: String,
     pub message: String,
 }
@@ -111,20 +131,32 @@ impl Tree {
         let mut size = 0;
         let mut tree_entry;
 
-        
-        
         for entry in fs::read_dir(dir).unwrap() {
             let entry = entry.unwrap();
-            if entry.file_name().to_str().unwrap().starts_with('.') || exclude.contains_key(&entry.path()) {
+            if entry.file_name().to_str().unwrap().starts_with('.')
+                || exclude.contains_key(&entry.path())
+            {
                 continue;
             }
             println!("{:?}", entry.file_name());
             let metadata = entry.metadata().unwrap();
             if metadata.is_dir() {
-                tree_entry = TreeEntry::new(entry.path(), ObjectType::ObjectTree, svc_path.clone(), exclude);
+                tree_entry = TreeEntry::new(
+                    entry.path(),
+                    ObjectType::ObjectTree,
+                    svc_path.clone(),
+                    exclude,
+                );
             } else {
-                tree_entry = TreeEntry::new(entry.path(), ObjectType::ObjectBlob, svc_path.clone(), exclude);
-                if let Err(err) = TreeEntry::save_blob(entry.path(), svc_path.clone(), &tree_entry.hash) {
+                tree_entry = TreeEntry::new(
+                    entry.path(),
+                    ObjectType::ObjectBlob,
+                    svc_path.clone(),
+                    exclude,
+                );
+                if let Err(err) =
+                    TreeEntry::save_blob(entry.path(), svc_path.clone(), &tree_entry.hash)
+                {
                     eprintln!("error: {}", err);
                     process::exit(1);
                 }
@@ -145,8 +177,6 @@ impl Tree {
         }
         tree
     }
-
-    
 }
 
 impl Commit {
@@ -154,7 +184,11 @@ impl Commit {
         let date = Local::now().format("%Y-%m-%d %H:%M").to_string();
         let str = date.clone() + &message[..] + "commit";
         let hash = get_str_hash(&str);
-        let parent_hash = Commit::get_head_hash(svc_path.clone());
+        let mut parent_hash = Commit::get_head_hash(svc_path.clone());
+        // first commit has no parent
+        if parent_hash == "" {
+            parent_hash = String::from("0000000000000000000000000000000000000000");
+        }
         // exclude files declared in '.svcignore'
         let mut exclude: HashMap<PathBuf, bool> = HashMap::new();
         if let Ok(file) = File::open(svc_path.parent().unwrap().join(".svcignore")) {
@@ -166,22 +200,49 @@ impl Commit {
                 exclude.insert(path, true);
             }
         }
-        let data = Tree::new(svc_path.clone().parent().unwrap().to_path_buf(), svc_path, &exclude);
+        let tree_hash = Tree::new(
+            svc_path.clone().parent().unwrap().to_path_buf(),
+            svc_path,
+            &exclude,
+        )
+        .hash;
         Commit {
             hash,
             parent_hash,
+            tree_hash,
             message,
             date,
-            data,
         }
     }
-    pub fn write_to_log(commit: &Commit, svc_path: PathBuf) -> Result<(), Error>{
+
+    pub fn write_to_log(commit: &Commit, svc_path: PathBuf) -> Result<(), Error> {
         let mut file = OpenOptions::new().append(true).open(svc_path.join("log"))?;
-        file.write_fmt(format_args!("{} {} {} {} {}\n", commit.hash, commit.parent_hash, commit.data.hash, commit.date, commit.message))?;
+        file.write_fmt(format_args!(
+            "{} {} {} {} {}\n",
+            commit.hash, commit.parent_hash, commit.tree_hash, commit.date, commit.message
+        ))?;
         Ok(())
     }
 
-    fn get_head_hash(svc_path: PathBuf) -> String {
+    pub fn read_from_log(svc_path: PathBuf) -> Vec<Commit> {
+        let mut commits: Vec<Commit> = Vec::new();
+        let file = File::open(svc_path.join("log")).unwrap();
+        let reader = BufReader::new(file);
+        for line in reader.lines() {
+            let line = line.unwrap();
+            let line: Vec<&str> = line.split_whitespace().collect();
+            commits.push(Commit {
+                hash: line[0].to_string(),
+                parent_hash: line[1].to_string(),
+                tree_hash: line[2].to_string(),
+                date: line[3].to_string() + " " + line[4],
+                message: line[5..].join(" "),
+            })
+        }
+        commits
+    }
+
+    pub fn get_head_hash(svc_path: PathBuf) -> String {
         let mut file = File::open(svc_path.join("head")).unwrap();
         let mut buf = String::from("");
         file.read_to_string(&mut buf).unwrap();

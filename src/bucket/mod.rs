@@ -71,11 +71,33 @@ pub fn init() {
 }
 
 pub fn log() {
-    println!("command log")
+    // println!("command log");
+    match check_svc_repo() {
+        Ok(svc_path) => {
+            let head_hash = Commit::get_head_hash(svc_path.clone());
+            let commits = Commit::read_from_log(svc_path);
+            if commits.len() == 0 {
+                eprintln!("error: no commit yet");
+            }
+            for commit in commits.iter().rev() {
+                if commit.hash == head_hash {
+                    println!("commit {} (HEAD)", commit.hash);
+                } else {
+                    println!("commit {}", commit.hash);
+                }
+                println!("Date:  {}", commit.date);
+                println!("\n\t{}\n", commit.message);
+            }
+        }
+        Err(err) => {
+            eprintln!("{}", err);
+            process::exit(1)
+        }
+    }
 }
 
 pub fn commit(message: &String) {
-    println!("command commit");
+    // println!("command commit");
     match check_svc_repo() {
         Ok(svc_path) => {
             let commit = Commit::new(message.to_string(), svc_path.clone());
