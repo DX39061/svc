@@ -1,6 +1,7 @@
 mod cli;
 mod bucket;
 mod remote;
+mod util;
 
 use bucket::*;
 use clap::Parser;
@@ -16,7 +17,7 @@ fn main() {
 
         Some(Commands::Log {}) => log(),
 
-        Some(Commands::Commit {}) => commit(),
+        Some(Commands::Commit { message }) => commit(message),
 
         Some(Commands::Checkout { version }) => checkout(version),
 

@@ -6,11 +6,11 @@ use std::{
     path::PathBuf,
 };
 pub struct RepoMeta {
-    repo_name: String,
-    repo_intro: String,
-    remote_url: String,
-    created_at: String,
-    updated_at: String,
+    pub repo_name: String,
+    pub repo_intro: String,
+    pub remote_url: String,
+    pub created_at: String,
+    pub updated_at: String,
 }
 
 impl Display for RepoMeta {

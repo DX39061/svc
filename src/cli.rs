@@ -1,4 +1,4 @@
-use clap::{Parser, Subcommand};
+use clap::{Parser, Subcommand, Args};
 
 /// Single-line Verion Control System
 #[derive(Parser)]
@@ -20,7 +20,11 @@ pub enum Commands {
     Log {},
 
     /// save current workplace
-    Commit {},
+    Commit {
+        /// commit message
+        #[arg(short, long)]
+        message: String
+    },
 
     /// switch to specific version
     Checkout { version: String },
