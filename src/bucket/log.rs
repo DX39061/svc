@@ -117,6 +117,43 @@ impl Commit {
         }
         Ok(())
     }
+
+    pub fn check_and_update_latest(svc_path: PathBuf) {
+        let mut head_commit_hash = String::new();
+        let mut latest_commit_hash = String::new();
+        let mut file_head = File::open(svc_path.join("head")).unwrap();
+        let mut file_latest = File::open(svc_path.join("latest")).unwrap();
+        file_head.read_to_string(&mut head_commit_hash).unwrap();
+        file_latest.read_to_string(&mut latest_commit_hash).unwrap();
+
+        if latest_commit_hash == head_commit_hash {
+            return;
+        }
+        let commits = Commit::read_from_log(svc_path.clone());
+        fs::remove_file(svc_path.join("log")).unwrap();
+        File::create(svc_path.join("log")).unwrap();
+        let mut file_log = OpenOptions::new().append(true).open(svc_path.join("log")).unwrap();
+        let mut file_log_bak = File::create(svc_path.join("log.bak")).unwrap();
+        let mut remove_flag = false;
+        
+        for commit in commits {
+            println!("commit: {:?}", commit.hash);
+            if remove_flag {
+                file_log_bak.write_fmt(format_args!(
+                    "{} {} {} {} {}\n",
+                    commit.hash, commit.parent_hash, commit.tree_hash, commit.date, commit.message
+                )).unwrap();
+            } else {
+                file_log.write_fmt(format_args!(
+                    "{} {} {} {} {}\n",
+                    commit.hash, commit.parent_hash, commit.tree_hash, commit.date, commit.message
+                )).unwrap();
+            }
+            if commit.hash == head_commit_hash {
+                remove_flag = true;
+            }
+        }
+    }
 }
 
 fn confirm_blob_restore(dir: PathBuf, svc_path: PathBuf, filename: String) {

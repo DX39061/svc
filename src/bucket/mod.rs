@@ -44,6 +44,8 @@ pub fn init() {
             println!("notice: .svc/head create successfully.");
             fs::File::create(current_dir.join(".svc/log")).unwrap();
             println!("notice: .svc/log create successfully.");
+            fs::File::create(current_dir.join(".svc/latest")).unwrap();
+            println!("notice: .svc/latest create successfully.");
             println!("-----------------------------------------");
             
             let mut repo_name = String::from("");
@@ -101,7 +103,10 @@ pub fn commit(message: &String) {
     // println!("command commit");
     match check_svc_repo() {
         Ok(svc_path) => {
+            Commit::check_and_update_latest(svc_path.clone());
             let commit = Commit::new(message.to_string(), svc_path.clone());
+            let mut file_latest = File::create(svc_path.join("latest")).unwrap();
+            file_latest.write(commit.hash.as_bytes()).unwrap();
             if let Err(err) = Commit::write_to_log(&commit, svc_path.clone()) {
                 eprintln!("error: {}", err);
                 process::exit(1);
