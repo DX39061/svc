@@ -1,23 +1,21 @@
-use crate::util::{compress_data, get_file_hash, get_str_hash};
+use crate::util::{compress_data, decompress_data, get_file_hash, get_str_hash};
 use std::{
     collections::HashMap,
     fmt::Display,
     fs::{self, File},
-    io::{Error, Read, Write},
+    io::{Error, Read, Write, BufReader, BufRead},
     path::PathBuf,
     process,
 };
 
-
-
 pub struct TreeEntry {
-    hash: String,
-    object_type: ObjectType,
-    name: String,
-    size: u64,
+    pub hash: String,
+    pub object_type: ObjectType,
+    pub size: u64,
+    pub name: String,
 }
 
-enum ObjectType {
+pub enum ObjectType {
     ObjectBlob,
     ObjectTree,
 }
@@ -103,10 +101,51 @@ impl TreeEntry {
         for entry in &tree.records {
             file_write.write_fmt(format_args!(
                 "{} {} {} {}\n",
-                entry.hash, entry.object_type, entry.name, entry.size
+                entry.hash, entry.object_type, entry.size, entry.name
             ))?;
         }
         println!("tree {:?}", tree.hash);
+        Ok(())
+    }
+
+    pub fn read_tree(tree_path: PathBuf) -> Vec<TreeEntry> {
+        let file = File::open(tree_path).unwrap();
+        let reader = BufReader::new(file);
+        let mut tree_entries = Vec::new();
+        for line in reader.lines() {
+            let line = line.unwrap();
+            let line: Vec<&str> = line.split(" ").collect();
+            if line.len() < 4 {
+                continue;
+            }
+            let object_type = match line[1] {
+                "blob" => ObjectType::ObjectBlob,
+                "tree" => ObjectType::ObjectTree,
+                _ => ObjectType::ObjectBlob
+            };
+            let tree_entry = TreeEntry {
+                hash: line[0].to_string(),
+                object_type,
+                size: line[2].parse::<u64>().unwrap(),
+                name: line[3..].join(" ")
+            };
+            tree_entries.push(tree_entry);
+        }
+        tree_entries
+    }
+
+    pub fn restore_blob(file_path: PathBuf, blob_path: PathBuf) -> Result<(), Error> {
+        let mut file_read = File::open(blob_path)?;
+        let mut file_write = File::create(file_path)?;
+        let mut buf = [0; 1024];
+
+        while let Ok(bytes_read) = file_read.read(&mut buf) {
+            if bytes_read == 0 {
+                break;
+            }
+            let buf = decompress_data(&buf);
+            file_write.write_all(&buf)?;
+        }
         Ok(())
     }
 }

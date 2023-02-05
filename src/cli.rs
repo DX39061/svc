@@ -1,4 +1,4 @@
-use clap::{Parser, Subcommand, Args};
+use clap::{Parser, Subcommand};
 
 /// Single-line Verion Control System
 #[derive(Parser)]

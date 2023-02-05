@@ -129,6 +129,42 @@ pub fn commit(message: &String) {
 }
 
 pub fn checkout(version: &String) {
-    println!("Command checkout");
-    println!("{}", version)
+    // println!("Command checkout");
+    // println!("{}", version);
+    match check_svc_repo() {
+        Ok(svc_path) => {
+            let commits = Commit::read_from_log(svc_path.clone());
+            let mut target: Option<Commit> = None;
+            let mut target_cnt = 0;
+            for commit in commits {
+                if commit.hash.starts_with(&version.to_string()) {
+                    target = Some(commit);
+                    target_cnt += 1
+                }
+            }
+            
+            if target_cnt == 1 {
+                let target = target.unwrap();
+                let target_hash = target.hash;
+                if let Err(err) = Commit::restore_tree(svc_path.parent().unwrap().to_path_buf(), svc_path.clone(), target.tree_hash) {
+                    eprintln!("error: {}", err);
+                    process::exit(1);
+                } else {
+                    Commit::reset_head(svc_path, target_hash);
+                    println!("switch to commit {}.", version);
+                }
+            } else if target_cnt < 1 {
+                eprintln!("error: version not found.");
+                process::exit(1)
+            } else if target_cnt > 1 {
+                eprintln!("error: found more than one version matches.");
+                process::exit(1)
+            }
+            
+        }
+        Err(err) => {
+            eprintln!("{}", err);
+            process::exit(1)
+        }
+    }
 }

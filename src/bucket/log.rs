@@ -1,11 +1,13 @@
-use crate::util::get_str_hash;
-use crate::bucket::tree::Tree;
+use crate::util::{get_str_hash, get_file_hash};
+use crate::bucket::tree::{Tree, TreeEntry, ObjectType};
 use chrono::Local;
+use std::path::Component;
 use std::{
     collections::HashMap,
-    fs::{File, OpenOptions},
+    fs::{self, File, OpenOptions},
     io::{BufRead, BufReader, Error, Read, Write},
-    path::PathBuf
+    path::PathBuf,
+    process
 };
 
 pub struct Commit {
@@ -85,4 +87,91 @@ impl Commit {
         file.read_to_string(&mut buf).unwrap();
         buf.trim().to_string()
     }
+
+    pub fn reset_head(svc_path: PathBuf, head_hash: String) {
+        let mut file = File::create(svc_path.join("head")).unwrap();
+        file.write(head_hash.as_bytes()).unwrap();
+    }
+
+    pub fn restore_tree(dir: PathBuf, svc_path: PathBuf, tree_hash: String) -> Result<(), Error> {
+        let tree_dir = svc_path.join("objects").join(&tree_hash[0..2]);
+        let tree_path = tree_dir.join(&tree_hash[2..]);
+        let tree_entries = TreeEntry::read_tree(tree_path);
+        for entry in tree_entries {
+            match entry.object_type {
+                ObjectType::ObjectBlob => {
+                    let blob_dir = svc_path.join("objects").join(&entry.hash[0..2]);
+                    let blob_path = blob_dir.join(&entry.hash[2..]);
+                    confirm_blob_restore(dir.clone(), svc_path.clone(), entry.name.clone());
+                    TreeEntry::restore_blob(dir.clone().join(entry.name), blob_path)?;
+                }
+                ObjectType::ObjectTree => {
+                    match fs::create_dir(dir.join(entry.name.clone())) {
+                        Ok(_) => (),
+                        Err(ref e) if e.kind() == std::io::ErrorKind::AlreadyExists => (),
+                        Err(e) => return Err(e),
+                    };
+                    Commit::restore_tree(dir.join(entry.name), svc_path.clone(), entry.hash)?;
+                }
+            }
+        }
+        Ok(())
+    }
+}
+
+fn confirm_blob_restore(dir: PathBuf, svc_path: PathBuf, filename: String) {
+    let mut relative_path = Vec::new();
+    let file_path = dir.join(filename.clone());
+    let mut file_components = file_path.components();
+    let mut svc_components = svc_path.parent().unwrap().components();
+    while let Some(c1) = file_components.next() {
+        if let Some(c2) = svc_components.next() {
+            if c1 == c2 {
+                continue;
+            }
+        }
+        relative_path.push(c1);
+    }
+    // println!("{:?}", relative_path);
+    let head_hash = Commit::get_head_hash(svc_path.clone());
+    if let Ok(tree_hash) = get_tree_of_commit(svc_path.clone(), head_hash) {
+        if let Ok(blob_hash) = get_blob_hash_from_entry(svc_path.clone(), tree_hash, relative_path) {
+            let file_hash = get_file_hash(file_path);
+            if blob_hash == file_hash {
+                return;
+            }
+        }
+    }
+    eprintln!("error: \'{}\' was modified but not saved." , filename);
+    eprintln!("error: forced version switching will result in data loss.");
+    process::exit(1);
+}
+
+fn get_tree_of_commit(svc_path: PathBuf, commit_hash: String) -> Result<String, ()> {
+   let commits = Commit::read_from_log(svc_path);
+   for commit in commits {
+    if commit_hash == commit.hash {
+        return Ok(commit.tree_hash);
+    }
+   } 
+   Err(())
+}
+
+fn get_blob_hash_from_entry(svc_path: PathBuf, tree_hash: String, relative_path: Vec<Component>) -> Result<String, ()>{
+    let tree_path = svc_path.join("objects").join(&tree_hash[0..2]).join(&tree_hash[2..]);
+    let tree_entries = TreeEntry::read_tree(tree_path);
+    
+    for tree_entry in tree_entries {
+        if tree_entry.name == relative_path[0].as_os_str().to_str().unwrap() {
+            match tree_entry.object_type {
+                ObjectType::ObjectBlob => {
+                    return Ok(tree_entry.hash);
+                }
+                ObjectType::ObjectTree => {
+                    return get_blob_hash_from_entry(svc_path, tree_entry.hash, relative_path[1..].to_vec());
+                }
+            }
+        }
+    }
+    Err(())
 }
