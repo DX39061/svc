@@ -112,7 +112,7 @@ pub fn commit(message: &String) {
                 process::exit(1);
             }
             let mut file = File::create(svc_path.clone().join("head")).unwrap();
-            file.write_all(commit.hash.as_bytes()).unwrap();
+            file.write(commit.hash.as_bytes()).unwrap();
 
             if let Err(err) = RepoMeta::update_repo_meta(RepoMeta{
                 repo_name: "\n".to_string(),

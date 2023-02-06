@@ -80,8 +80,8 @@ impl TreeEntry {
             if bytes_read == 0 {
                 break;
             }
-            let buf = compress_data(&buf);
-            file_write.write_all(&buf)?;
+            let buf = compress_data(&buf[0..bytes_read]);
+            file_write.write(&buf)?;
         }
         println!("blob {:?}", hash);
         Ok(())
@@ -143,8 +143,8 @@ impl TreeEntry {
             if bytes_read == 0 {
                 break;
             }
-            let buf = decompress_data(&buf);
-            file_write.write_all(&buf)?;
+            let buf = decompress_data(&buf[0..bytes_read]);
+            file_write.write(&buf)?;
         }
         Ok(())
     }

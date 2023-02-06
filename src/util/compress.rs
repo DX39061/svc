@@ -8,7 +8,7 @@ use flate2::{
 
 pub fn compress_data(data: &[u8]) -> Vec<u8>{
     let mut encoder = ZlibEncoder::new(Vec::new(), Compression::fast());
-    encoder.write_all(data).unwrap();
+    encoder.write(data).unwrap();
     encoder.finish().unwrap()
 }
 
