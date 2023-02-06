@@ -28,17 +28,7 @@ impl Commit {
         if parent_hash == "" {
             parent_hash = String::from("0000000000000000000000000000000000000000");
         }
-        // exclude files declared in '.svcignore'
-        let mut exclude: HashMap<PathBuf, bool> = HashMap::new();
-        if let Ok(file) = File::open(svc_path.parent().unwrap().join(".svcignore")) {
-            let reader = BufReader::new(file);
-            for line in reader.lines() {
-                let line = line.unwrap();
-                let path = svc_path.parent().unwrap().join(line.trim());
-                println!("exclude {:?}", path);
-                exclude.insert(path, true);
-            }
-        }
+        let exclude = Commit::read_ignore(svc_path.clone());
         let tree_hash = Tree::new(
             svc_path.clone().parent().unwrap().to_path_buf(),
             svc_path,
@@ -61,6 +51,21 @@ impl Commit {
             commit.hash, commit.parent_hash, commit.tree_hash, commit.date, commit.message
         ))?;
         Ok(())
+    }
+
+    pub fn read_ignore(svc_path: PathBuf) -> HashMap<PathBuf, bool>{
+        // exclude files declared in '.svcignore'
+        let mut exclude: HashMap<PathBuf, bool> = HashMap::new();
+        if let Ok(file) = File::open(svc_path.parent().unwrap().join(".svcignore")) {
+            let reader = BufReader::new(file);
+            for line in reader.lines() {
+                let line = line.unwrap();
+                let path = svc_path.parent().unwrap().join(line.trim());
+                println!("exclude {:?}", path);
+                exclude.insert(path, true);
+            }
+        }
+        exclude
     }
 
     pub fn read_from_log(svc_path: PathBuf) -> Vec<Commit> {
@@ -102,7 +107,11 @@ impl Commit {
                 ObjectType::ObjectBlob => {
                     let blob_dir = svc_path.join("objects").join(&entry.hash[0..2]);
                     let blob_path = blob_dir.join(&entry.hash[2..]);
-                    confirm_blob_restore(dir.clone(), svc_path.clone(), entry.name.clone());
+                    if let Err("doesn't match")  = check_blob_state(dir.join(entry.name.clone()), svc_path.clone()) {
+                        eprintln!("error: \'{}\' was modified but not saved." , dir.join(entry.name).to_str().unwrap());
+                        eprintln!("error: forced version switching will result in data loss.");
+                        process::exit(1);
+                    }
                     TreeEntry::restore_blob(dir.clone().join(entry.name), blob_path)?;
                 }
                 ObjectType::ObjectTree => {
@@ -156,9 +165,9 @@ impl Commit {
     }
 }
 
-fn confirm_blob_restore(dir: PathBuf, svc_path: PathBuf, filename: String) {
+pub fn check_blob_state(file_path: PathBuf, svc_path: PathBuf) -> Result<(), &'static str>{
     let mut relative_path = Vec::new();
-    let file_path = dir.join(filename.clone());
+    // let file_path = dir.join(filename.clone());
     let mut file_components = file_path.components();
     let mut svc_components = svc_path.parent().unwrap().components();
     while let Some(c1) = file_components.next() {
@@ -175,14 +184,12 @@ fn confirm_blob_restore(dir: PathBuf, svc_path: PathBuf, filename: String) {
         if let Ok(blob_hash) = get_blob_hash_from_entry(svc_path.clone(), tree_hash, relative_path) {
             let file_hash = get_file_hash(file_path);
             if blob_hash == file_hash {
-                return;
+                return Ok(());
             }
-            eprintln!("error: \'{}\' was modified but not saved." , filename);
-            eprintln!("error: forced version switching will result in data loss.");
-            process::exit(1);
+            return Err("doesn't match");
         }
     }
-    
+    Err("not found")
 }
 
 fn get_tree_of_commit(svc_path: PathBuf, commit_hash: String) -> Result<String, ()> {
@@ -199,17 +206,33 @@ fn get_blob_hash_from_entry(svc_path: PathBuf, tree_hash: String, relative_path:
     let tree_path = svc_path.join("objects").join(&tree_hash[0..2]).join(&tree_hash[2..]);
     let tree_entries = TreeEntry::read_tree(tree_path);
     
-    for tree_entry in tree_entries {
-        if tree_entry.name == relative_path[0].as_os_str().to_str().unwrap() {
-            match tree_entry.object_type {
+    for entry in tree_entries {
+        if entry.name == relative_path[0].as_os_str().to_str().unwrap() {
+            match entry.object_type {
                 ObjectType::ObjectBlob => {
-                    return Ok(tree_entry.hash);
+                    return Ok(entry.hash);
                 }
                 ObjectType::ObjectTree => {
-                    return get_blob_hash_from_entry(svc_path, tree_entry.hash, relative_path[1..].to_vec());
+                    return get_blob_hash_from_entry(svc_path, entry.hash, relative_path[1..].to_vec());
                 }
             }
         }
     }
     Err(())
+}
+
+pub fn get_file_paths_in_dir(dir: PathBuf, files: &mut Vec<PathBuf>, exclude: HashMap<PathBuf, bool>) -> &Vec<PathBuf> {
+    for entry in fs::read_dir(dir).unwrap() {
+        let entry = entry.unwrap();
+        let entry_meta = entry.metadata().unwrap();
+        if exclude.contains_key(&entry.path()) || entry.file_name().to_str().unwrap().starts_with(".") {
+            continue;
+        }
+        if entry_meta.is_dir() {
+            return get_file_paths_in_dir(entry.path(), files, exclude);
+        } else {
+            files.push(entry.path());
+        }
+    }
+    files
 }

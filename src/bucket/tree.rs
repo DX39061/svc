@@ -165,9 +165,8 @@ impl Tree {
 
         for entry in fs::read_dir(dir).unwrap() {
             let entry = entry.unwrap();
-            if entry.file_name().to_str().unwrap().starts_with('.')
-                || exclude.contains_key(&entry.path())
-            {
+            if (entry.file_name().to_str().unwrap().starts_with('.') && entry.file_name() != ".svcignore")
+                || exclude.contains_key(&entry.path()) {
                 continue;
             }
             println!("{:?}", entry.file_name());

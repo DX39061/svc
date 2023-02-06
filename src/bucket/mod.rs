@@ -1,7 +1,7 @@
-use std::{env, fs::{self, File}, io::{self, Write}, process};
+use std::{env, fs::{self, File}, io::{self, Write}, process, path::PathBuf};
 use chrono::Local;
 use repo::{check_svc_repo, RepoMeta};
-use log::Commit;
+use log::{Commit, check_blob_state, get_file_paths_in_dir};
 
 mod repo;
 mod log;
@@ -91,6 +91,52 @@ pub fn log() {
                 println!("Date:  {}", commit.date);
                 println!("\n\t{}\n", commit.message);
             }
+        }
+        Err(err) => {
+            eprintln!("{}", err);
+            process::exit(1)
+        }
+    }
+}
+
+pub fn status() {
+    match check_svc_repo() {
+        Ok(svc_path) => {
+            let mut untracked: Vec<PathBuf> = Vec::new();
+            let mut modified: Vec<PathBuf> = Vec::new();
+            let root_path = svc_path.clone().parent().unwrap().to_path_buf();
+            let mut files: Vec<PathBuf> = Vec::new();
+            let exclude = Commit::read_ignore(svc_path.clone());
+            files = get_file_paths_in_dir(root_path, &mut files, exclude).to_vec();
+            for file_path in files {
+                // println!("{:?}", file_path);
+                if let Err(err) = check_blob_state(file_path.clone(), svc_path.clone()) {
+                    if err == "not found" {
+                        untracked.push(file_path.clone());
+                    } else if err == "doesn't match" {
+                        modified.push(file_path);
+                    }
+                }
+            }
+            if modified.len() == 0 && untracked.len() == 0 {
+                println!("clean workspace.");
+                return;
+            }
+            if modified.len() != 0 {
+                println!("\nmodified but not saved:");
+                println!("  (run \"svc checkout\" will get an error)");
+                for file in modified {
+                    println!("  {}", file.to_str().unwrap());
+                }
+            }
+            if untracked.len() != 0 {
+                println!("\nunntracked:");
+                println!("  (run \"svc commmit\" will discard commits after HEAD)");
+                for file in untracked {
+                    println!("  {}", file.to_str().unwrap());
+                }
+            }
+            println!("\nnotice: run \"svc commit\" to save current workspace");
         }
         Err(err) => {
             eprintln!("{}", err);

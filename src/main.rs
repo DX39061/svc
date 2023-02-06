@@ -17,6 +17,8 @@ fn main() {
 
         Some(Commands::Log {}) => log(),
 
+        Some(Commands::Status {}) => status(),
+
         Some(Commands::Commit { message }) => commit(message),
 
         Some(Commands::Checkout { version }) => checkout(version),

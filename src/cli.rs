@@ -19,6 +19,9 @@ pub enum Commands {
     /// show all versions log
     Log {},
 
+    /// check files status
+    Status{},
+
     /// save current workplace
     Commit {
         /// commit message
