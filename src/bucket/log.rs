@@ -177,11 +177,12 @@ fn confirm_blob_restore(dir: PathBuf, svc_path: PathBuf, filename: String) {
             if blob_hash == file_hash {
                 return;
             }
+            eprintln!("error: \'{}\' was modified but not saved." , filename);
+            eprintln!("error: forced version switching will result in data loss.");
+            process::exit(1);
         }
     }
-    eprintln!("error: \'{}\' was modified but not saved." , filename);
-    eprintln!("error: forced version switching will result in data loss.");
-    process::exit(1);
+    
 }
 
 fn get_tree_of_commit(svc_path: PathBuf, commit_hash: String) -> Result<String, ()> {

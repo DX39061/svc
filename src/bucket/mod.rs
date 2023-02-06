@@ -155,8 +155,8 @@ pub fn checkout(version: &String) {
                     eprintln!("error: {}", err);
                     process::exit(1);
                 } else {
-                    Commit::reset_head(svc_path, target_hash);
-                    println!("switch to commit {}.", version);
+                    Commit::reset_head(svc_path, target_hash.clone());
+                    println!("switch to commit {}.", target_hash);
                 }
             } else if target_cnt < 1 {
                 eprintln!("error: version not found.");
